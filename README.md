@@ -15,7 +15,7 @@ to [tape-run](https://github.com/tape-testing/tape-run).
 
 <!-- toc -->
 
-- [_Featuring_](#_featuring_)
+- [_Featuring_](#featuring)
 - [Install](#install)
   * [Install Playwright Dependencies](#install-playwright-dependencies)
 - [Use](#use)
@@ -60,7 +60,7 @@ Examples:
   cat test.js | tapout --reporter html --outfile my-test-results.html
 ```
 
-## _Featuring_
+## *Featuring*
 
 - **Cross-browser testing**: Run tests in Chrome, Firefox, Safari (WebKit),
   or Edge
