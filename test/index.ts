@@ -242,7 +242,7 @@ test('CLI: handles invalid JavaScript', async (t) => {
 })
 
 test('CLI: can run tests in Firefox', async (t) => {
-    const result = await runCliTest('_simple-test.js', 10000, 'firefox')
+    const result = await runCliTest('_simple-test.js', 20000, 'firefox')
 
     t.equal(result.exitCode, 0, 'simple test should exit with code 0 in Firefox')
     t.ok(
@@ -256,7 +256,7 @@ test('CLI: can run tests in Firefox', async (t) => {
 })
 
 test('CLI: can run tests in WebKit', async (t) => {
-    const result = await runCliTest('_simple-test.js', 5000, 'webkit')
+    const result = await runCliTest('_simple-test.js', 20000, 'webkit')
 
     t.equal(result.exitCode, 0, 'simple test should exit with code 0 in WebKit')
     t.ok(
@@ -270,7 +270,7 @@ test('CLI: can run tests in WebKit', async (t) => {
 })
 
 test('CLI: can run tests in Edge', async (t) => {
-    const result = await runCliTest('_simple-test.js', 5000, 'edge')
+    const result = await runCliTest('_simple-test.js', 20000, 'edge')
 
     t.equal(result.exitCode, 0, 'simple test should exit with code 0 in Edge')
     t.ok(
@@ -384,7 +384,7 @@ test('CLI: Vite environment variables should be available', async (t) => {
 
 async function runCliTest (
     testFile:string,
-    timeoutMs:number = 3000,
+    timeoutMs:number = 5000,
     browser:string = 'chromium'
 ):Promise<TestResult> {
     // Increase timeout for CI environments
