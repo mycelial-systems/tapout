@@ -15,7 +15,7 @@ to [tape-run](https://github.com/tape-testing/tape-run).
 
 <!-- toc -->
 
-- [_Featuring_](#featuring)
+- [*Featuring*](#featuring)
 - [Install](#install)
   * [Install Playwright Dependencies](#install-playwright-dependencies)
 - [Use](#use)

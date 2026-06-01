@@ -1,6 +1,6 @@
 {
   "name": "@substrate-system/tapout",
-  "version": "0.0.37",
+  "version": "0.0.38",
   "description": "Run tests in a browser from the command line.",
   "type": "module",
   "directories": {
