@@ -73,6 +73,24 @@ test('CLI: failing test should fail', async (t) => {
     )
 })
 
+test('CLI: page-side console.warn does not crash the run', async (t) => {
+    const result = await runCliTest('_console-warn-test.js')
+
+    t.equal(
+        result.exitCode,
+        0,
+        'should exit 0 despite a page-side console.warn'
+    )
+    t.ok(
+        result.stdout.includes('ok 1'),
+        'should still report the passing test'
+    )
+    t.ok(
+        !result.stderr.includes('is not a function'),
+        'should not throw a TypeError forwarding the console message'
+    )
+})
+
 test('CLI: detects unhandled promise rejections', async (t) => {
     const result = await runCliTest('_unhandled-rejection-test.js')
 

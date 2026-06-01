@@ -16,6 +16,24 @@ const browsers:Record<SupportedBrowser, BrowserType> = {
     edge: chromium  // Edge uses Chromium engine
 }
 
+type ConsoleMethod = 'log'|'info'|'warn'|'error'|'debug'
+
+// Playwright's console message `type()` is not always a Node `console`
+// method name -- e.g. `console.warn` reports as "warning" and
+// `console.group` as "startGroup". Map the known ones and fall back to
+// `log` so forwarding a page-side message can never crash the run.
+const CONSOLE_METHOD:Record<string, ConsoleMethod> = {
+    log: 'log',
+    info: 'info',
+    debug: 'debug',
+    error: 'error',
+    warning: 'warn'
+}
+
+function consoleMethod (type:string):ConsoleMethod {
+    return CONSOLE_METHOD[type] || 'log'
+}
+
 function parseTestLine (line: string) {
     const test = {
         name: '',
@@ -201,7 +219,7 @@ export async function runTestsInBrowser (
 
             // For TAP reporter, output directly to console
             if (reporter === 'tap') {
-                console[msg.type()](text)
+                console[consoleMethod(msg.type())](text)
             }
 
             // Parse and store test results for other reporters
