@@ -444,5 +444,5 @@ npm test
 
 
 ```
-/ed3d-plan-and-execute:start-implementation-plan @docs/design-plans/2026-06-29-html-option.md .
+/ed3d-plan-and-execute:execute-implementation-plan /Users/nick/code/tapout/docs/implementation-plans/2026-06-29-html-option/ /Users/nick/code/tapout/
 ```
