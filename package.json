@@ -23,9 +23,10 @@
   },
   "scripts": {
     "lint": "eslint \"./**/*.{ts,js}\"",
-    "test": "npm run test:unit && npm run test:timeout",
+    "test": "npm run test:unit && npm run test:timeout && npm run test:autofinish",
     "test:unit": "esbuild test/index.ts --platform=node --format=esm --keep-names --bundle | node --input-type=module | tap-spec",
     "test:timeout": "esbuild ./test/timeout-option-test.js --platform=node | node",
+    "test:autofinish": "esbuild ./test/custom-timeout-autofinish-test.js --platform=node | node",
     "build-esm": "esbuild src/*.ts --format=esm --metafile=dist/meta.json --keep-names --tsconfig=tsconfig.build.json --outdir=./dist --sourcemap && tsc --emitDeclarationOnly --project tsconfig.build.json --outDir dist && cp src/test-runner.html src/test-harness.js dist/",
     "build": "mkdir -p ./dist && rm -rf ./dist/* && npm run build-esm",
     "build-docs": "typedoc ./src/index.ts --out docs/api",

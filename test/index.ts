@@ -36,6 +36,26 @@ test('CLI: simple test should pass', async (t) => {
     )
 })
 
+test('CLI: concurrent runs do not collide on a port', async (t) => {
+    // Each CLI invocation starts its own HTTP server. If the port is fixed,
+    // running several at once makes all but the first fail to bind (EADDRINUSE)
+    // with no error handler -> a hard crash. With an ephemeral port they coexist
+    // -- which is what lets the suite be parallelised.
+    const results = await Promise.all([
+        runCliTest('_simple-test.js'),
+        runCliTest('_simple-test.js'),
+        runCliTest('_simple-test.js')
+    ])
+
+    for (const result of results) {
+        t.equal(
+            result.exitCode,
+            0,
+            'each concurrent run should exit with code 0'
+        )
+    }
+})
+
 test('CLI: complex test should pass', async (t) => {
     const result = await runCliTest('_tape-test.js')
 
@@ -246,7 +266,7 @@ test('CLI: handles invalid JavaScript', async (t) => {
                 stdout,
                 stderr: stderr + 'Test timed out'
             })
-        }, 5000)
+        }, 5000).unref()
     })
 
     t.equal(result.exitCode, 1, 'invalid JavaScript should exit with code 1')
@@ -347,7 +367,7 @@ setTimeout(() => {
                 stdout,
                 stderr: stderr + 'Test timed out'
             })
-        }, 15000)
+        }, 15000).unref()
     })
 
     t.equal(result.exitCode, 0, 'long running test should complete successfully')
@@ -463,7 +483,9 @@ async function runCliTest (
             })
         })
 
-        // Timeout after CLI timeout + 2 seconds for overhead
+        // Timeout after CLI timeout + 2 seconds for overhead.
+        // unref() so the watchdog does not keep the event loop alive after
+        // the child closes and the promise has already resolved.
         setTimeout(() => {
             child.kill('SIGTERM')
             resolve({
@@ -471,7 +493,7 @@ async function runCliTest (
                 stdout,
                 stderr: stderr + `Test timed out after ${adjustedTimeout + 2000}ms`
             })
-        }, adjustedTimeout + 2000)
+        }, adjustedTimeout + 2000).unref()
     })
 }
 
@@ -535,7 +557,7 @@ async function runHtmlCliTest (
                 stderr: stderr +
                     `Test timed out after ${adjustedTimeout + 2000}ms`
             })
-        }, adjustedTimeout + 2000)
+        }, adjustedTimeout + 2000).unref()
     })
 }
 
@@ -665,7 +687,7 @@ function runCliNoStdin (
         setTimeout(() => {
             child.kill('SIGTERM')
             resolve({ exitCode: null, stdout, stderr: stderr + 'hung' })
-        }, timeoutMs)
+        }, timeoutMs).unref()
     })
 }
 

@@ -34,7 +34,6 @@ function parseArgs () {
     let outdir: string | undefined
     let outfile: string | undefined
     let html: string | undefined
-    let customTimeout = false  // track if timeout was explicitly set
 
     for (let i = 0; i < args.length; i++) {
         if (args[i] === '--timeout' || args[i] === '-t') {
@@ -45,7 +44,6 @@ function parseArgs () {
                 process.exit(1)
             }
             timeout = timeoutValue
-            customTimeout = true
             i++  // skip the next argument since we consumed it
         } else if (args[i] === '--browser' || args[i] === '-b') {
             const browserValue = args[i + 1]
@@ -106,7 +104,6 @@ function parseArgs () {
     }
 
     return {
-        customTimeout,
         timeout,
         browser,
         reporter,
@@ -120,7 +117,7 @@ function parseArgs () {
 async function main () {
     try {
         const {
-            customTimeout, timeout, browser, reporter, outdir, outfile,
+            timeout, browser, reporter, outdir, outfile,
             html, hasArgs
         } = parseArgs()
 
@@ -155,7 +152,6 @@ async function main () {
 
         await runTestsInBrowser(testCode, {
             timeout,
-            customTimeout,
             browser,
             reporter,
             outdir,

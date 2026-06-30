@@ -225,7 +225,6 @@ export async function runTestsInBrowser (
     testCode:string,
     options:{
         timeout?:number;
-        customTimeout?:boolean;
         browser?:SupportedBrowser;
         reporter?: 'tap' | 'html';
         outdir?: string;
@@ -233,9 +232,7 @@ export async function runTestsInBrowser (
         html?: string;
     } = {}
 ):Promise<void> {
-    const PORT = 8123
     const timeout = options.timeout || 5000
-    const customTimeout = options.customTimeout || false
     const browserType = options.browser || 'chromium'
     const reporter = options.reporter || 'tap'
 
@@ -265,7 +262,9 @@ export async function runTestsInBrowser (
 
     // Custom server to serve static files and dynamic test code
     const server = createServer(async (req, res) => {
-        const url = new URL(req.url || '/', `http://localhost:${PORT}`)
+        // The base is only used to parse the pathname out of req.url, so a
+        // placeholder host is fine -- the real port is assigned dynamically.
+        const url = new URL(req.url || '/', 'http://localhost')
         const pathname = url.pathname
 
         try {
@@ -325,7 +324,20 @@ export async function runTestsInBrowser (
     })
 
     try {
-        server.listen(PORT)
+        // Listen on an ephemeral port (0) and read back the one the OS assigned
+        // so concurrent runs never collide. Await "listening" before reading
+        // the port and navigating to it.
+        const port = await new Promise<number>((resolve, reject) => {
+            server.once('error', reject)
+            server.listen(0, () => {
+                const address = server.address()
+                if (address && typeof address === 'object') {
+                    resolve(address.port)
+                } else {
+                    reject(new Error('could not determine server port'))
+                }
+            })
+        })
 
         const browserOptions = browserType === 'edge' ?
             { channel: 'msedge' as const } :
@@ -401,8 +413,7 @@ export async function runTestsInBrowser (
         try {
             const pagePath = injectedPage !== null ? '/' : '/test-runner.html'
             await page.goto(
-                `http://localhost:${PORT}${pagePath}` +
-                    `?timeout=${timeout}&custom=${customTimeout}`
+                `http://localhost:${port}${pagePath}?timeout=${timeout}`
             )
 
             try {

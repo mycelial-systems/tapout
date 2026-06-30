@@ -10,26 +10,23 @@
 // Get timeout from URL parameters, default to 5000ms
 const urlParams = new URLSearchParams(window.location.search)
 const timeoutMs = parseInt(urlParams.get('timeout'), 10) || 5000
-const isCustomTimeout = urlParams.get('custom') === 'true'
 const noAutoFinish = urlParams.get('noAutoFinish') === 'true'
 
-// For custom timeouts, keep the auto-finish close to the requested timeout
-// instead of forcing a fixed 2-3 second cap.
+// Auto-finish is only a FALLBACK for tests that never signal completion. It
+// fires after a short quiet period (no output) following the last log. Keep
+// that period short and bounded, and deliberately INDEPENDENT of the overall
+// --timeout (which only bounds how long the whole run may take). Tying it to
+// the timeout -- e.g. 80% of it -- meant a finished test that forgot to signal
+// idled for most of a long timeout before the run ended. A test that runs long
+// while silent must set window.testsFinished or emit periodic output to stay
+// alive past this window.
 let autoFinishDelay
 if (noAutoFinish) {
     // If auto-finish is disabled, we still need some fallback
     // Use the full timeout as the delay
     autoFinishDelay = timeoutMs
-} else if (isCustomTimeout) {
-    // Use 80% of the provided timeout and keep a small buffer so the
-    // outer wait timeout does not win the race.
-    autoFinishDelay = Math.max(
-        1000,
-        Math.min(timeoutMs - 250, Math.floor(timeoutMs * 0.8))
-    )
 } else {
-    // Use a reasonable auto-finish delay for default timeout
-    autoFinishDelay = Math.max(500, Math.min(5000, timeoutMs * 0.2))
+    autoFinishDelay = Math.max(500, Math.min(3000, Math.floor(timeoutMs * 0.2)))
 }
 
 // Set up test completion detection
