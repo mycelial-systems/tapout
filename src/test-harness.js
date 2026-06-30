@@ -1,3 +1,12 @@
+// This module is the in-page test harness. It is served VERBATIM at runtime
+// (GET /__tapout/harness.js -- see src/index.ts) and is placed in dist/ by the
+// "cp" at the end of the "build-esm" script in package.json. It is NOT compiled
+// or bundled: esbuild's "src/*.ts" glob skips .js/.html assets. Two invariants
+// follow. Keep this file plain, lint-clean ES that runs as-is in the browser
+// (no TypeScript, no build-time transforms) -- rewriting it in TS would orphan
+// the cp and ship a stale dist/. And any other asset served verbatim from src/
+// must be added to that same cp, or it will be missing from dist/.
+
 // Get timeout from URL parameters, default to 5000ms
 const urlParams = new URLSearchParams(window.location.search)
 const timeoutMs = parseInt(urlParams.get('timeout'), 10) || 5000

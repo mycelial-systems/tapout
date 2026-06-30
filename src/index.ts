@@ -270,7 +270,10 @@ export async function runTestsInBrowser (
 
         try {
             if (pathname === '/__tapout/harness.js') {
-                // Serve the in-page harness module
+                // Serve the in-page harness module. test-harness.js is copied
+                // verbatim into dist/ by the build-esm "cp" (esbuild does not
+                // process it); see the header in src/test-harness.js for the
+                // no-bundle invariant before adding new served-from-src assets.
                 const harnessPath = path.join(__dirname, 'test-harness.js')
                 const harnessContent = await fs.readFile(harnessPath, 'utf8')
                 res.writeHead(200, {
