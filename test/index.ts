@@ -474,3 +474,134 @@ async function runCliTest (
         }, adjustedTimeout + 2000)
     })
 }
+
+async function runHtmlCliTest (
+    testFile:string,
+    htmlFile:string,
+    timeoutMs:number = 5000,
+    browser:string = 'chromium'
+):Promise<TestResult> {
+    const isCI = process.env.CI === 'true'
+    const adjustedTimeout = isCI ? timeoutMs * 2 : timeoutMs
+    return new Promise((resolve) => {
+        const testPath = path.join(projectRoot, 'test', testFile)
+        const htmlPath = path.join(projectRoot, 'test', htmlFile)
+        const child = spawn('node', [
+            cliPath,
+            '--html', htmlPath,
+            '--timeout', adjustedTimeout.toString(),
+            '--browser', browser
+        ], {
+            cwd: projectRoot,
+            stdio: ['pipe', 'pipe', 'pipe']
+        })
+
+        let stdout = ''
+        let stderr = ''
+
+        child.stdout.on('data', (data) => {
+            stdout += data.toString()
+        })
+
+        child.stderr.on('data', (data) => {
+            stderr += data.toString()
+        })
+
+        fs.readFile(testPath, 'utf8')
+            .then((testCode) => {
+                child.stdin.write(testCode)
+                child.stdin.end()
+            })
+            .catch((err) => {
+                stderr += `Error reading test file: ${err.message}`
+                child.kill('SIGTERM')
+                resolve({ exitCode: 1, stdout, stderr })
+            })
+
+        child.on('close', (code) => {
+            resolve({ exitCode: code, stdout, stderr })
+        })
+
+        child.on('error', (err) => {
+            stderr += `Process error: ${err.message}`
+            resolve({ exitCode: 1, stdout, stderr })
+        })
+
+        setTimeout(() => {
+            child.kill('SIGTERM')
+            resolve({
+                exitCode: null,
+                stdout,
+                stderr: stderr +
+                    `Test timed out after ${adjustedTimeout + 2000}ms`
+            })
+        }, adjustedTimeout + 2000)
+    })
+}
+
+// AC1.1, AC1.2, AC4.1
+test('CLI --html: full document fixture runs, upgrades markup', async (t) => {
+    const result = await runHtmlCliTest('_html-test.js', '_html-fixture.html')
+    t.equal(result.exitCode, 0, 'should exit 0')
+    t.ok(
+        result.stdout.includes('ok 1 - fixture element upgraded'),
+        'element upgraded'
+    )
+    t.ok(
+        result.stdout.includes('ok 2 - connectedCallback enhanced markup'),
+        'markup enhanced'
+    )
+})
+
+// AC1.3
+test('CLI --html: uppercase </BODY> still gets harness injected', async (t) => {
+    const result = await runHtmlCliTest(
+        '_html-test.js',
+        '_html-fixture-upper.html'
+    )
+    t.equal(result.exitCode, 0, 'should exit 0')
+    t.ok(
+        result.stdout.includes('ok 2 - connectedCallback enhanced markup'),
+        'ran against uppercase-body fixture'
+    )
+})
+
+// AC1.4
+test('CLI --html: not ok against fixture exits non-zero', async (t) => {
+    const result = await runHtmlCliTest(
+        '_html-failing-test.js',
+        '_html-fixture.html'
+    )
+    t.ok(result.exitCode !== 0, 'should exit non-zero on failure')
+})
+
+// AC2.1, AC2.2
+test('CLI --html: fragment fixture is wrapped and runs', async (t) => {
+    const result = await runHtmlCliTest('_html-test.js', '_html-fragment.html')
+    t.equal(result.exitCode, 0, 'should exit 0')
+    t.ok(
+        result.stdout.includes('ok 1 - fixture element upgraded'),
+        'fragment element present and upgraded'
+    )
+})
+
+// AC4.2
+test('CLI --html: runs in firefox', async (t) => {
+    const result = await runHtmlCliTest(
+        '_html-test.js',
+        '_html-fixture.html',
+        20000,
+        'firefox'
+    )
+    t.equal(result.exitCode, 0, 'should exit 0 in firefox')
+})
+
+// AC4.3
+test('CLI --html: respects --timeout', async (t) => {
+    const result = await runHtmlCliTest(
+        '_html-test.js',
+        '_html-fixture.html',
+        15000
+    )
+    t.equal(result.exitCode, 0, 'should exit 0 with custom timeout')
+})

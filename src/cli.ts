@@ -30,6 +30,7 @@ function parseArgs () {
     let reporter: 'tap' | 'html' = 'tap'  // default TAP output
     let outdir: string | undefined
     let outfile: string | undefined
+    let html: string | undefined
     let customTimeout = false  // track if timeout was explicitly set
 
     for (let i = 0; i < args.length; i++) {
@@ -83,6 +84,14 @@ function parseArgs () {
             }
             outfile = outfileValue
             i++  // skip the next argument since we consumed it
+        } else if (args[i] === '--html') {
+            const htmlValue = args[i + 1]
+            if (!htmlValue) {
+                console.error('Error: --html requires a file path')
+                process.exit(1)
+            }
+            html = htmlValue
+            i++  // skip the next argument since we consumed it
         } else if (args[i] === '--help' || args[i] === '-h') {
             showHelp()
             process.exit(0)
@@ -100,13 +109,17 @@ function parseArgs () {
         reporter,
         outdir,
         outfile,
+        html,
         hasArgs: args.length > 0
     }
 }
 
 async function main () {
     try {
-        const { customTimeout, timeout, browser, reporter, outdir, outfile, hasArgs } = parseArgs()
+        const {
+            customTimeout, timeout, browser, reporter, outdir, outfile,
+            html, hasArgs
+        } = parseArgs()
 
         // If no arguments and stdin is a TTY (interactive terminal), show help
         if (!hasArgs && process.stdin.isTTY) {
@@ -127,7 +140,8 @@ async function main () {
             browser,
             reporter,
             outdir,
-            outfile
+            outfile,
+            html
         })
     } catch (error) {
         console.error('Error running tests:', error)

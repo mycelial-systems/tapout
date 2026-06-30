@@ -129,6 +129,37 @@ function transformViteEnv (code:string):string {
     return transformed
 }
 
+/**
+ * Build the page served at GET / in --html mode: the user's fixture with the
+ * harness script injected immediately before the last </body>. A bare fragment
+ * (no <!doctype>/<html>) is wrapped in a minimal document first. Injection is
+ * case-insensitive; if there is no </body>, the harness is appended.
+ *
+ * Note: injection is string-based. A literal "</body>" inside a comment or
+ * string in the fixture could be matched (accepted dev-tooling trade-off).
+ */
+function buildInjectedPage (rawHtml:string):string {
+    const harnessTag =
+        '<script type="module" src="/__tapout/harness.js"></script>'
+
+    // Detect full document vs fragment (case-insensitive).
+    const lower = rawHtml.toLowerCase()
+    const isDocument =
+        lower.includes('<!doctype') || lower.includes('<html')
+
+    const doc = isDocument ?
+        rawHtml :
+        '<!doctype html><html><head><meta charset="utf-8"></head>' +
+            '<body>' + rawHtml + '</body></html>'
+
+    // Inject before the last case-insensitive </body>; append if absent.
+    const closeIndex = doc.toLowerCase().lastIndexOf('</body>')
+    if (closeIndex === -1) {
+        return doc + harnessTag
+    }
+    return doc.slice(0, closeIndex) + harnessTag + doc.slice(closeIndex)
+}
+
 export async function runTestsInBrowser (
     testCode:string,
     options:{
@@ -138,6 +169,7 @@ export async function runTestsInBrowser (
         reporter?: 'tap' | 'html';
         outdir?: string;
         outfile?: string;
+        html?: string;
     } = {}
 ):Promise<void> {
     const PORT = 8123
@@ -145,6 +177,14 @@ export async function runTestsInBrowser (
     const customTimeout = options.customTimeout || false
     const browserType = options.browser || 'chromium'
     const reporter = options.reporter || 'tap'
+
+    // In --html mode, read the fixture and build the injected page once.
+    let injectedPage:string|null = null
+    if (options.html) {
+        const htmlPath = path.resolve(options.html)
+        const rawHtml = await fs.readFile(htmlPath, 'utf8')
+        injectedPage = buildInjectedPage(rawHtml)
+    }
 
     // Store test results for non-TAP reporters
     const testResults: Array<{
@@ -176,17 +216,26 @@ export async function runTestsInBrowser (
                     'Content-Type': 'application/javascript'
                 })
                 res.end(transformedCode)
+            } else if (injectedPage !== null) {
+                // --html mode
+                if (pathname === '/') {
+                    res.writeHead(200, { 'Content-Type': 'text/html' })
+                    res.end(injectedPage)
+                } else {
+                    // Phase 3 adds static file serving here.
+                    res.writeHead(404)
+                    res.end('Not Found')
+                }
             } else if (
                 pathname === '/' ||
                 pathname === '/test-runner.html'
             ) {
-                // Serve the static HTML runner page
+                // Default mode: serve the static HTML runner page
                 const htmlPath = path.join(__dirname, 'test-runner.html')
                 const htmlContent = await fs.readFile(htmlPath, 'utf8')
                 res.writeHead(200, { 'Content-Type': 'text/html' })
                 res.end(htmlContent)
             } else {
-                // 404 for other paths
                 res.writeHead(404)
                 res.end('Not Found')
             }
@@ -271,7 +320,11 @@ export async function runTestsInBrowser (
         })
 
         try {
-            await page.goto(`http://localhost:${PORT}/test-runner.html?timeout=${timeout}&custom=${customTimeout}`)
+            const pagePath = injectedPage !== null ? '/' : '/test-runner.html'
+            await page.goto(
+                `http://localhost:${PORT}${pagePath}` +
+                    `?timeout=${timeout}&custom=${customTimeout}`
+            )
 
             try {
                 await page.waitForFunction(
