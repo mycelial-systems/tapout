@@ -129,22 +129,127 @@ function transformViteEnv (code:string):string {
     return transformed
 }
 
+/**
+ * Build the page served at GET / in --html mode: the user's fixture with the
+ * harness script injected immediately before the last </body>. A bare fragment
+ * (no <!doctype>/<html>) is wrapped in a minimal document first. Injection is
+ * case-insensitive; if there is no </body>, the harness is appended.
+ *
+ * Note: injection is string-based. A literal "</body>" inside a comment or
+ * string in the fixture could be matched (accepted dev-tooling trade-off).
+ */
+function buildInjectedPage (rawHtml:string):string {
+    const harnessTag =
+        '<script type="module" src="/__tapout/harness.js"></script>'
+
+    // Detect full document vs fragment (case-insensitive).
+    const lower = rawHtml.toLowerCase()
+    const isDocument =
+        lower.includes('<!doctype') || lower.includes('<html')
+
+    const doc = isDocument ?
+        rawHtml :
+        '<!doctype html><html><head><meta charset="utf-8"></head>' +
+            '<body>' + rawHtml + '</body></html>'
+
+    // Inject before the last case-insensitive </body>; append if absent.
+    const closeIndex = doc.toLowerCase().lastIndexOf('</body>')
+    if (closeIndex === -1) {
+        return doc + harnessTag
+    }
+    return doc.slice(0, closeIndex) + harnessTag + doc.slice(closeIndex)
+}
+
+const MIME_TYPES:Record<string, string> = {
+    '.html': 'text/html',
+    '.js': 'application/javascript',
+    '.mjs': 'application/javascript',
+    '.css': 'text/css',
+    '.json': 'application/json',
+    '.svg': 'image/svg+xml',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.woff': 'font/woff',
+    '.woff2': 'font/woff2',
+    '.ttf': 'font/ttf',
+    '.map': 'application/json',
+    '.wasm': 'application/wasm',
+    '.ico': 'image/x-icon',
+    '.txt': 'text/plain'
+}
+
+type StaticResult =
+    { status:200; body:Buffer; contentType:string } |
+    { status:404 }
+
+/**
+ * Resolve urlPath under root and return the file, guarding against path
+ * traversal. Returns 404 (not 403) for anything that escapes root or is
+ * missing, so directory structure is not leaked.
+ */
+async function serveStaticFile (
+    root:string,
+    urlPath:string
+):Promise<StaticResult> {
+    let decoded:string
+    try {
+        // Strip any query string, then percent-decode.
+        decoded = decodeURIComponent(urlPath.split('?')[0])
+    } catch (_err) {
+        return { status: 404 }
+    }
+
+    // Resolve under root, then verify the result stays inside root.
+    const relative = decoded.replace(/^\/+/, '')
+    const resolved = path.resolve(root, relative)
+    const rel = path.relative(root, resolved)
+    if (rel.startsWith('..') || path.isAbsolute(rel)) {
+        return { status: 404 }
+    }
+
+    try {
+        const body = await fs.readFile(resolved)
+        const ext = path.extname(resolved).toLowerCase()
+        const contentType = MIME_TYPES[ext] || 'application/octet-stream'
+        return { status: 200, body, contentType }
+    } catch (_err) {
+        // Missing file, or path is a directory (EISDIR) -> 404.
+        return { status: 404 }
+    }
+}
+
 export async function runTestsInBrowser (
     testCode:string,
     options:{
         timeout?:number;
-        customTimeout?:boolean;
         browser?:SupportedBrowser;
         reporter?: 'tap' | 'html';
         outdir?: string;
         outfile?: string;
+        html?: string;
     } = {}
 ):Promise<void> {
-    const PORT = 8123
     const timeout = options.timeout || 5000
-    const customTimeout = options.customTimeout || false
     const browserType = options.browser || 'chromium'
     const reporter = options.reporter || 'tap'
+
+    // In --html mode, read the fixture and build the injected page once.
+    let injectedPage:string|null = null
+    let staticRoot = ''
+    if (options.html) {
+        const htmlPath = path.resolve(options.html)
+        let rawHtml:string
+        try {
+            rawHtml = await fs.readFile(htmlPath, 'utf8')
+        } catch (_err) {
+            throw new Error(`could not read --html file: ${options.html}`)
+        }
+        injectedPage = buildInjectedPage(rawHtml)
+        staticRoot = path.dirname(htmlPath)
+    }
 
     // Store test results for non-TAP reporters
     const testResults: Array<{
@@ -157,23 +262,58 @@ export async function runTestsInBrowser (
 
     // Custom server to serve static files and dynamic test code
     const server = createServer(async (req, res) => {
-        const url = new URL(req.url || '/', `http://localhost:${PORT}`)
+        // The base is only used to parse the pathname out of req.url, so a
+        // placeholder host is fine -- the real port is assigned dynamically.
+        const url = new URL(req.url || '/', 'http://localhost')
         const pathname = url.pathname
 
         try {
-            if (pathname === '/' || pathname === '/test-runner.html') {
-                // Serve the static HTML file
+            if (pathname === '/__tapout/harness.js') {
+                // Serve the in-page harness module. test-harness.js is copied
+                // verbatim into dist/ by the build-esm "cp" (esbuild does not
+                // process it); see the header in src/test-harness.js for the
+                // no-bundle invariant before adding new served-from-src assets.
+                const harnessPath = path.join(__dirname, 'test-harness.js')
+                const harnessContent = await fs.readFile(harnessPath, 'utf8')
+                res.writeHead(200, {
+                    'Content-Type': 'application/javascript'
+                })
+                res.end(harnessContent)
+            } else if (pathname === '/__tapout/test-bundle.js') {
+                // Serve the test code with Vite env transformation
+                const transformedCode = transformViteEnv(testCode)
+                res.writeHead(200, {
+                    'Content-Type': 'application/javascript'
+                })
+                res.end(transformedCode)
+            } else if (injectedPage !== null) {
+                // --html mode
+                if (pathname === '/') {
+                    res.writeHead(200, { 'Content-Type': 'text/html' })
+                    res.end(injectedPage)
+                } else {
+                    // Serve a static file from the fixture's directory.
+                    const result = await serveStaticFile(staticRoot, pathname)
+                    if (result.status === 200) {
+                        res.writeHead(200, {
+                            'Content-Type': result.contentType
+                        })
+                        res.end(result.body)
+                    } else {
+                        res.writeHead(404)
+                        res.end('Not Found')
+                    }
+                }
+            } else if (
+                pathname === '/' ||
+                pathname === '/test-runner.html'
+            ) {
+                // Default mode: serve the static HTML runner page
                 const htmlPath = path.join(__dirname, 'test-runner.html')
                 const htmlContent = await fs.readFile(htmlPath, 'utf8')
                 res.writeHead(200, { 'Content-Type': 'text/html' })
                 res.end(htmlContent)
-            } else if (pathname === '/test-bundle.js') {
-                // Serve the test code with Vite env transformation
-                const transformedCode = transformViteEnv(testCode)
-                res.writeHead(200, { 'Content-Type': 'application/javascript' })
-                res.end(transformedCode)
             } else {
-                // 404 for other paths
                 res.writeHead(404)
                 res.end('Not Found')
             }
@@ -184,7 +324,20 @@ export async function runTestsInBrowser (
     })
 
     try {
-        server.listen(PORT)
+        // Listen on an ephemeral port (0) and read back the one the OS assigned
+        // so concurrent runs never collide. Await "listening" before reading
+        // the port and navigating to it.
+        const port = await new Promise<number>((resolve, reject) => {
+            server.once('error', reject)
+            server.listen(0, () => {
+                const address = server.address()
+                if (address && typeof address === 'object') {
+                    resolve(address.port)
+                } else {
+                    reject(new Error('could not determine server port'))
+                }
+            })
+        })
 
         const browserOptions = browserType === 'edge' ?
             { channel: 'msedge' as const } :
@@ -258,7 +411,10 @@ export async function runTestsInBrowser (
         })
 
         try {
-            await page.goto(`http://localhost:${PORT}/test-runner.html?timeout=${timeout}&custom=${customTimeout}`)
+            const pagePath = injectedPage !== null ? '/' : '/test-runner.html'
+            await page.goto(
+                `http://localhost:${port}${pagePath}?timeout=${timeout}`
+            )
 
             try {
                 await page.waitForFunction(

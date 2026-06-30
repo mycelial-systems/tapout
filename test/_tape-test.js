@@ -26,4 +26,8 @@ Promise.resolve(42).then(result => {
     } else {
         console.log('not ok 3 - object test failed')
     }
+
+    // Signal completion after the async assertions have logged, so the run
+    // finishes promptly instead of waiting out the auto-finish delay.
+    window.testsFinished = true
 })

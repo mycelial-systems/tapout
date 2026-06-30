@@ -9,3 +9,4 @@ console.log('1..1')
 console.warn('a warning emitted from the page')
 console.group('a group emitted from the page')
 console.log('ok 1 - run completes despite page-side console.warn')
+window.testsFinished = true

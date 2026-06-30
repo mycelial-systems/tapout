@@ -22,10 +22,10 @@ test('CLI timeout option (-t) works correctly', async (t) => {
         'long running test completed')
     
     if (hasAutoFinished && !hasTestOutput) {
-        // With a 10 second timeout and custom=true, auto-finish should be at 8 seconds
-        // So a 6 second test should complete before auto-finishing
-        // If it auto-finished, the timeout mechanism isn't working as expected
-        console.log('Warning: Test auto-finished before completion. Expected 8s auto-finish delay but test took 6s.')
+        // The heartbeating 6s test should stay alive and complete within the
+        // 10s timeout, not auto-finish. If it auto-finished, the keep-alive or
+        // timeout mechanism isn't working as expected.
+        console.log('Warning: Test auto-finished before completion.')
         t.ok(successResult.exitCode === 0, 'test should still exit successfully even if auto-finished')
     } else {
         t.ok(
@@ -50,29 +50,41 @@ test('CLI timeout option (-t) works correctly', async (t) => {
     )
 })
 
-test('CLI custom timeout should not auto-finish after ~3 seconds', async (t) => {
-    const delayedCompletionTest = `
+test('CLI: a delayed test that emits output is not auto-finished early',
+    async (t) => {
+        // The auto-finish quiet period is short and independent of --timeout. A
+        // test that completes at 4s stays alive by emitting periodic output, so
+        // it is not cut off before it signals -- even under a generous 10s
+        // timeout. (A silent test would instead be expected to set
+        // window.testsFinished itself.)
+        const delayedCompletionTest = `
 console.log('TAP version 13')
 console.log('1..1')
+const beat = setInterval(() => console.log('# still running'), 200)
 setTimeout(() => {
+    clearInterval(beat)
     console.log('ok 1 - delayed completion after 4 seconds')
     window.testsFinished = true
 }, 4000)
 `
 
-    const result = await runCliWithInput(delayedCompletionTest, 10000)
+        const result = await runCliWithInput(delayedCompletionTest, 10000)
 
-    t.equal(result.exitCode, 0, 'should exit successfully with 10 second timeout')
-    t.ok(
-        result.stdout.includes('ok 1 - delayed completion after 4 seconds'),
-        'should wait for the 4 second test completion output'
-    )
-    t.equal(
-        result.stdout.includes('Tests auto-finished'),
-        false,
-        'should not auto-finish before delayed test completion'
-    )
-})
+        t.equal(
+            result.exitCode,
+            0,
+            'should exit successfully with 10 second timeout'
+        )
+        t.ok(
+            result.stdout.includes('ok 1 - delayed completion after 4 seconds'),
+            'should wait for the 4 second test completion output'
+        )
+        t.equal(
+            result.stdout.includes('Tests auto-finished'),
+            false,
+            'should not auto-finish before delayed test completion'
+        )
+    })
 
 test('CLI default timeout should be 5000ms when --timeout is not provided', async (t) => {
     const timeoutProbeTest = `

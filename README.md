@@ -26,6 +26,7 @@ to [tape-run](https://github.com/tape-testing/tape-run).
   * [`-b`, `--browser`](#-b---browser)
   * [`-t`, `--timeout`](#-t---timeout)
   * [`-r`, `--reporter`](#-r---reporter)
+  * [`--html`](#--html)
   * [GitHub Pages Integration](#github-pages-integration)
 - [Accessibility Testing with Axe](#accessibility-testing-with-axe)
   * [Test specific WCAG rules](#test-specific-wcag-rules)
@@ -48,6 +49,7 @@ Options:
   -r, --reporter <name> Output format: tap, html (default: tap)
   --outdir <path>       Output directory for HTML reports (default: current directory)
   --outfile <name>      Output filename for HTML reports (default: index.html)
+  --html <path>         Serve a custom HTML fixture as the test page (for web components)
   -h, --help           Show this help message
 
 Examples:
@@ -58,6 +60,7 @@ Examples:
   cat test.js | tapout --reporter html
   cat test.js | tapout --reporter html --outdir ./reports
   cat test.js | tapout --reporter html --outfile my-test-results.html
+  cat test.js | tapout --html ./fixture.html
 ```
 
 ## *Featuring*
@@ -147,7 +150,7 @@ const apiUrl = import.meta.env.DEV ?
 ```
 
 
-### CI
+## CI
 
 After `npm install`, you will need to do an `npx playwright install`.
 
@@ -168,7 +171,7 @@ For example, in Github CI,
 # ...
 ```
 
-### Generate HTML reports
+## Generate HTML reports
 
 By default writes to `stdout`.
 
@@ -177,7 +180,7 @@ cat ./test/index.js | npx tapout --reporter html > index.html
 open index.html  # View the generated report
 ```
 
-#### HTML Summary
+### HTML Summary
 
 * `--reporter html` with no other options -> output HTML to stdout
 * `--reporter html --outfile filename.html` -> save to `filename.html` in
@@ -192,6 +195,10 @@ open index.html  # View the generated report
 Pass in the name of a browser to use. Default is Chrome.
 
 Possibilities are `chromium`, `firefox`, `webkit`, or `edge`.
+
+```sh
+cat test.js | npx tapout --browser firefox
+```
 
 ### `-t`, `--timeout`
 
@@ -259,7 +266,48 @@ The HTML reporter generates an `index.html` file by default with:
 - If neither `--outdir` nor `--outfile` is specified, HTML output is sent
   to stdout
 
-### GitHub Pages Integration
+## Pass in HTML
+
+Use option `--html` to pass in an HTML file instead of JS.
+By default tapout serves a minimal empty page.
+
+If you need to test, for example, a web component that depends on having
+specific markup in the page, this is how to do it. The fixture's directory
+(where the HTML file is located) is treated as a static root dir for relative
+links.
+
+A bare fragment (no `<!doctype>`/`<html>`) is wrapped in a minimal document
+for you.
+
+`fixture.html`:
+
+```html
+<!doctype html>
+<html>
+  <body>
+    <my-greeting data-name="world"></my-greeting>
+    <script type="module" src="./my-greeting.js"></script>
+  </body>
+</html>
+```
+
+Run it (assertions still come from stdin):
+
+```bash
+cat test.js | tapout --html ./fixture.html
+```
+
+The markup is parsed first, then `my-greeting.js` registers the component and
+the browser upgrades the existing element before your assertions run.
+
+Two caveats: tapout reserves the `/__tapout/` URL prefix for its harness and
+test bundle, so a fixture asset under that path would be shadowed; and harness
+injection finds the last `</body>` by string match, so a literal `</body>`
+inside a comment or string in the fixture would break it.
+
+---
+
+## GitHub Pages Integration
 
 The generated HTML file is self-contained and can be easily hosted on GitHub
 Pages or any static hosting service. Simply commit the HTML file to
@@ -435,4 +483,14 @@ Run the tests for this module. See the [`test/` directory](./test/).
 
 ```bash
 npm test
+```
+
+
+
+---
+
+
+
+```
+/ed3d-plan-and-execute:execute-implementation-plan /Users/nick/code/tapout/docs/implementation-plans/2026-06-29-html-option/ /Users/nick/code/tapout/
 ```

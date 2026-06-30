@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { readStdin, runTestsInBrowser } from './index.js'
+import { promises as fs, constants } from 'node:fs'
 
 function showHelp () {
     console.log(`Usage: tapout [options]
@@ -11,6 +12,7 @@ Options:
   -r, --reporter <name> Output format: tap, html (default: tap)
   --outdir <path>       Output directory for HTML reports (default: current directory)
   --outfile <name>      Output filename for HTML reports (default: index.html)
+  --html <path>         Serve a custom HTML fixture as the test page (for web components)
   -h, --help           Show this help message
 
 Examples:
@@ -20,7 +22,8 @@ Examples:
   cat test.js | tapout --browser edge
   cat test.js | tapout --reporter html
   cat test.js | tapout --reporter html --outdir ./reports
-  cat test.js | tapout --reporter html --outfile my-test-results.html`)
+  cat test.js | tapout --reporter html --outfile my-test-results.html
+  cat test.js | tapout --html ./fixture.html`)
 }
 
 function parseArgs () {
@@ -30,7 +33,7 @@ function parseArgs () {
     let reporter: 'tap' | 'html' = 'tap'  // default TAP output
     let outdir: string | undefined
     let outfile: string | undefined
-    let customTimeout = false  // track if timeout was explicitly set
+    let html: string | undefined
 
     for (let i = 0; i < args.length; i++) {
         if (args[i] === '--timeout' || args[i] === '-t') {
@@ -41,7 +44,6 @@ function parseArgs () {
                 process.exit(1)
             }
             timeout = timeoutValue
-            customTimeout = true
             i++  // skip the next argument since we consumed it
         } else if (args[i] === '--browser' || args[i] === '-b') {
             const browserValue = args[i + 1]
@@ -83,6 +85,14 @@ function parseArgs () {
             }
             outfile = outfileValue
             i++  // skip the next argument since we consumed it
+        } else if (args[i] === '--html') {
+            const htmlValue = args[i + 1]
+            if (!htmlValue) {
+                console.error('Error: --html requires a file path')
+                process.exit(1)
+            }
+            html = htmlValue
+            i++  // skip the next argument since we consumed it
         } else if (args[i] === '--help' || args[i] === '-h') {
             showHelp()
             process.exit(0)
@@ -94,24 +104,34 @@ function parseArgs () {
     }
 
     return {
-        customTimeout,
         timeout,
         browser,
         reporter,
         outdir,
         outfile,
+        html,
         hasArgs: args.length > 0
     }
 }
 
 async function main () {
     try {
-        const { customTimeout, timeout, browser, reporter, outdir, outfile, hasArgs } = parseArgs()
+        const {
+            timeout, browser, reporter, outdir, outfile,
+            html, hasArgs
+        } = parseArgs()
 
-        // If no arguments and stdin is a TTY (interactive terminal), show help
-        if (!hasArgs && process.stdin.isTTY) {
-            showHelp()
-            process.exit(0)
+        // stdin is an interactive terminal: there is nothing piped to read.
+        if (process.stdin.isTTY) {
+            if (!hasArgs) {
+                // No args: show help (existing behavior).
+                showHelp()
+                process.exit(0)
+            }
+            // Args present (e.g. --html) but nothing piped: do not hang.
+            console.error('Error: no test code piped to stdin. ' +
+                'Pipe test code, e.g. cat test.js | tapout --html fixture.html')
+            process.exit(1)
         }
 
         const testCode = await readStdin()
@@ -121,13 +141,22 @@ async function main () {
             process.exit(1)
         }
 
+        if (html) {
+            try {
+                await fs.access(html, constants.R_OK)
+            } catch (_err) {
+                console.error(`Error: cannot read --html file: ${html}`)
+                process.exit(1)
+            }
+        }
+
         await runTestsInBrowser(testCode, {
             timeout,
-            customTimeout,
             browser,
             reporter,
             outdir,
-            outfile
+            outfile,
+            html
         })
     } catch (error) {
         console.error('Error running tests:', error)

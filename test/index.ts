@@ -36,6 +36,26 @@ test('CLI: simple test should pass', async (t) => {
     )
 })
 
+test('CLI: concurrent runs do not collide on a port', async (t) => {
+    // Each CLI invocation starts its own HTTP server. If the port is fixed,
+    // running several at once makes all but the first fail to bind (EADDRINUSE)
+    // with no error handler -> a hard crash. With an ephemeral port they coexist
+    // -- which is what lets the suite be parallelised.
+    const results = await Promise.all([
+        runCliTest('_simple-test.js'),
+        runCliTest('_simple-test.js'),
+        runCliTest('_simple-test.js')
+    ])
+
+    for (const result of results) {
+        t.equal(
+            result.exitCode,
+            0,
+            'each concurrent run should exit with code 0'
+        )
+    }
+})
+
 test('CLI: complex test should pass', async (t) => {
     const result = await runCliTest('_tape-test.js')
 
@@ -246,7 +266,7 @@ test('CLI: handles invalid JavaScript', async (t) => {
                 stdout,
                 stderr: stderr + 'Test timed out'
             })
-        }, 5000)
+        }, 5000).unref()
     })
 
     t.equal(result.exitCode, 1, 'invalid JavaScript should exit with code 1')
@@ -347,7 +367,7 @@ setTimeout(() => {
                 stdout,
                 stderr: stderr + 'Test timed out'
             })
-        }, 15000)
+        }, 15000).unref()
     })
 
     t.equal(result.exitCode, 0, 'long running test should complete successfully')
@@ -463,7 +483,9 @@ async function runCliTest (
             })
         })
 
-        // Timeout after CLI timeout + 2 seconds for overhead
+        // Timeout after CLI timeout + 2 seconds for overhead.
+        // unref() so the watchdog does not keep the event loop alive after
+        // the child closes and the promise has already resolved.
         setTimeout(() => {
             child.kill('SIGTERM')
             resolve({
@@ -471,6 +493,230 @@ async function runCliTest (
                 stdout,
                 stderr: stderr + `Test timed out after ${adjustedTimeout + 2000}ms`
             })
-        }, adjustedTimeout + 2000)
+        }, adjustedTimeout + 2000).unref()
     })
 }
+
+async function runHtmlCliTest (
+    testFile:string,
+    htmlFile:string,
+    timeoutMs:number = 5000,
+    browser:string = 'chromium'
+):Promise<TestResult> {
+    const isCI = process.env.CI === 'true'
+    const adjustedTimeout = isCI ? timeoutMs * 2 : timeoutMs
+    return new Promise((resolve) => {
+        const testPath = path.join(projectRoot, 'test', testFile)
+        const htmlPath = path.join(projectRoot, 'test', htmlFile)
+        const child = spawn('node', [
+            cliPath,
+            '--html', htmlPath,
+            '--timeout', adjustedTimeout.toString(),
+            '--browser', browser
+        ], {
+            cwd: projectRoot,
+            stdio: ['pipe', 'pipe', 'pipe']
+        })
+
+        let stdout = ''
+        let stderr = ''
+
+        child.stdout.on('data', (data) => {
+            stdout += data.toString()
+        })
+
+        child.stderr.on('data', (data) => {
+            stderr += data.toString()
+        })
+
+        fs.readFile(testPath, 'utf8')
+            .then((testCode) => {
+                child.stdin.write(testCode)
+                child.stdin.end()
+            })
+            .catch((err) => {
+                stderr += `Error reading test file: ${err.message}`
+                child.kill('SIGTERM')
+                resolve({ exitCode: 1, stdout, stderr })
+            })
+
+        child.on('close', (code) => {
+            resolve({ exitCode: code, stdout, stderr })
+        })
+
+        child.on('error', (err) => {
+            stderr += `Process error: ${err.message}`
+            resolve({ exitCode: 1, stdout, stderr })
+        })
+
+        setTimeout(() => {
+            child.kill('SIGTERM')
+            resolve({
+                exitCode: null,
+                stdout,
+                stderr: stderr +
+                    `Test timed out after ${adjustedTimeout + 2000}ms`
+            })
+        }, adjustedTimeout + 2000).unref()
+    })
+}
+
+// AC1.1, AC1.2, AC4.1
+test('CLI --html: full document fixture runs, upgrades markup', async (t) => {
+    const result = await runHtmlCliTest('_html-test.js', '_html-fixture.html')
+    t.equal(result.exitCode, 0, 'should exit 0')
+    t.ok(
+        result.stdout.includes('ok 1 - fixture element upgraded'),
+        'element upgraded'
+    )
+    t.ok(
+        result.stdout.includes('ok 2 - connectedCallback enhanced markup'),
+        'markup enhanced'
+    )
+})
+
+// AC1.3
+test('CLI --html: uppercase </BODY> still gets harness injected', async (t) => {
+    const result = await runHtmlCliTest(
+        '_html-test.js',
+        '_html-fixture-upper.html'
+    )
+    t.equal(result.exitCode, 0, 'should exit 0')
+    t.ok(
+        result.stdout.includes('ok 2 - connectedCallback enhanced markup'),
+        'ran against uppercase-body fixture'
+    )
+})
+
+// AC1.4
+test('CLI --html: not ok against fixture exits non-zero', async (t) => {
+    const result = await runHtmlCliTest(
+        '_html-failing-test.js',
+        '_html-fixture.html'
+    )
+    t.ok(result.exitCode !== 0, 'should exit non-zero on failure')
+})
+
+// AC2.1, AC2.2
+test('CLI --html: fragment fixture is wrapped and runs', async (t) => {
+    const result = await runHtmlCliTest('_html-test.js', '_html-fragment.html')
+    t.equal(result.exitCode, 0, 'should exit 0')
+    t.ok(
+        result.stdout.includes('ok 1 - fixture element upgraded'),
+        'fragment element present and upgraded'
+    )
+})
+
+// AC4.2
+test('CLI --html: runs in firefox', async (t) => {
+    const result = await runHtmlCliTest(
+        '_html-test.js',
+        '_html-fixture.html',
+        20000,
+        'firefox'
+    )
+    t.equal(result.exitCode, 0, 'should exit 0 in firefox')
+})
+
+// AC4.3
+test('CLI --html: respects --timeout', async (t) => {
+    const result = await runHtmlCliTest(
+        '_html-test.js',
+        '_html-fixture.html',
+        15000
+    )
+    t.equal(result.exitCode, 0, 'should exit 0 with custom timeout')
+})
+
+// AC3.1
+test('CLI --html: sibling module served, upgrades markup', async (t) => {
+    const result = await runHtmlCliTest(
+        '_html-enhance-test.js',
+        '_html-fixture-external.html'
+    )
+    t.equal(result.exitCode, 0, 'should exit 0')
+    t.ok(
+        result.stdout.includes('ok 1 - sibling module upgraded markup'),
+        'sibling module served from fixture dir and upgraded markup'
+    )
+})
+
+// AC3.2
+test('CLI --html: path traversal request returns 404', async (t) => {
+    const result = await runHtmlCliTest(
+        '_html-traversal-test.js',
+        '_html-fixture.html'
+    )
+    t.equal(result.exitCode, 0, 'should exit 0')
+    t.ok(
+        result.stdout.includes('ok 1 - path traversal returns 404'),
+        'out-of-root path rejected with 404'
+    )
+})
+
+function runCliNoStdin (
+    extraArgs:ReadonlyArray<string>,
+    timeoutMs:number = 5000
+):Promise<TestResult> {
+    return new Promise((resolve) => {
+        const child = spawn('node', [cliPath, ...extraArgs], {
+            cwd: projectRoot,
+            stdio: ['ignore', 'pipe', 'pipe']
+        })
+
+        let stdout = ''
+        let stderr = ''
+
+        child.stdout.on('data', (data) => {
+            stdout += data.toString()
+        })
+
+        child.stderr.on('data', (data) => {
+            stderr += data.toString()
+        })
+
+        child.on('close', (code) => {
+            resolve({ exitCode: code, stdout, stderr })
+        })
+
+        child.on('error', (err) => {
+            stderr += `Process error: ${err.message}`
+            resolve({ exitCode: 1, stdout, stderr })
+        })
+
+        setTimeout(() => {
+            child.kill('SIGTERM')
+            resolve({ exitCode: null, stdout, stderr: stderr + 'hung' })
+        }, timeoutMs).unref()
+    })
+}
+
+// AC5.1
+test('CLI --html: missing fixture file exits 1', async (t) => {
+    const result = await runHtmlCliTest('_html-test.js', '_does-not-exist.html')
+    t.equal(result.exitCode, 1, 'missing --html file should exit 1')
+})
+
+// AC5.2 (no usable stdin -> non-zero exit, no hang)
+// NOTE: with stdin ignored, isTTY is false, so this validates the OBSERVABLE
+// contract (non-zero exit, no hang) via the existing empty-input path. The new
+// isTTY "pipe test code" branch is not directly exercised — a real interactive
+// terminal would be needed (a PTY / node-pty), which is out of scope.
+test('CLI --html: no piped test code exits non-zero, no hang', async (t) => {
+    const htmlPath = path.join(projectRoot, 'test', '_html-fixture.html')
+    const result = await runCliNoStdin([
+        '--html', htmlPath,
+        '--timeout', '5000'
+    ])
+    t.ok(
+        result.exitCode !== 0 && result.exitCode !== null,
+        'should exit non-zero (not hang) when nothing is piped'
+    )
+})
+
+// AC5.3
+test('CLI --help lists the --html option', async (t) => {
+    const result = await runCliNoStdin(['--help'])
+    t.equal(result.exitCode, 0, '--help exits 0')
+    t.ok(result.stdout.includes('--html'), 'help text lists --html')
+})
