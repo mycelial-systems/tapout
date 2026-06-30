@@ -631,3 +631,63 @@ test('CLI --html: path traversal request returns 404', async (t) => {
         'out-of-root path rejected with 404'
     )
 })
+
+function runCliNoStdin (
+    extraArgs:ReadonlyArray<string>,
+    timeoutMs:number = 5000
+):Promise<TestResult> {
+    return new Promise((resolve) => {
+        const child = spawn('node', [cliPath, ...extraArgs], {
+            cwd: projectRoot,
+            stdio: ['ignore', 'pipe', 'pipe']
+        })
+
+        let stdout = ''
+        let stderr = ''
+
+        child.stdout.on('data', (data) => {
+            stdout += data.toString()
+        })
+
+        child.stderr.on('data', (data) => {
+            stderr += data.toString()
+        })
+
+        child.on('close', (code) => {
+            resolve({ exitCode: code, stdout, stderr })
+        })
+
+        child.on('error', (err) => {
+            stderr += `Process error: ${err.message}`
+            resolve({ exitCode: 1, stdout, stderr })
+        })
+
+        setTimeout(() => {
+            child.kill('SIGTERM')
+            resolve({ exitCode: null, stdout, stderr: stderr + 'hung' })
+        }, timeoutMs)
+    })
+}
+
+// AC5.1
+test('CLI --html: missing fixture file exits 1', async (t) => {
+    const result = await runHtmlCliTest('_html-test.js', '_does-not-exist.html')
+    t.equal(result.exitCode, 1, 'missing --html file should exit 1')
+})
+
+// AC5.2 (no usable stdin -> non-zero exit, no hang)
+// NOTE: with stdin ignored, isTTY is false, so this validates the OBSERVABLE
+// contract (non-zero exit, no hang) via the existing empty-input path. The new
+// isTTY "pipe test code" branch is not directly exercised — a real interactive
+// terminal would be needed (a PTY / node-pty), which is out of scope.
+test('CLI --html: no piped test code exits non-zero, no hang', async (t) => {
+    const htmlPath = path.join(projectRoot, 'test', '_html-fixture.html')
+    const result = await runCliNoStdin([
+        '--html', htmlPath,
+        '--timeout', '5000'
+    ])
+    t.ok(
+        result.exitCode !== 0 && result.exitCode !== null,
+        'should exit non-zero (not hang) when nothing is piped'
+    )
+})

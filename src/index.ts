@@ -244,7 +244,12 @@ export async function runTestsInBrowser (
     let staticRoot = ''
     if (options.html) {
         const htmlPath = path.resolve(options.html)
-        const rawHtml = await fs.readFile(htmlPath, 'utf8')
+        let rawHtml:string
+        try {
+            rawHtml = await fs.readFile(htmlPath, 'utf8')
+        } catch (_err) {
+            throw new Error(`could not read --html file: ${options.html}`)
+        }
         injectedPage = buildInjectedPage(rawHtml)
         staticRoot = path.dirname(htmlPath)
     }

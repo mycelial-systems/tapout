@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { readStdin, runTestsInBrowser } from './index.js'
+import { promises as fs, constants } from 'node:fs'
 
 function showHelp () {
     console.log(`Usage: tapout [options]
@@ -121,10 +122,17 @@ async function main () {
             html, hasArgs
         } = parseArgs()
 
-        // If no arguments and stdin is a TTY (interactive terminal), show help
-        if (!hasArgs && process.stdin.isTTY) {
-            showHelp()
-            process.exit(0)
+        // stdin is an interactive terminal: there is nothing piped to read.
+        if (process.stdin.isTTY) {
+            if (!hasArgs) {
+                // No args: show help (existing behavior).
+                showHelp()
+                process.exit(0)
+            }
+            // Args present (e.g. --html) but nothing piped: do not hang.
+            console.error('Error: no test code piped to stdin. ' +
+                'Pipe test code, e.g. cat test.js | tapout --html fixture.html')
+            process.exit(1)
         }
 
         const testCode = await readStdin()
@@ -132,6 +140,15 @@ async function main () {
         if (!testCode.trim()) {
             console.error('No test code provided via stdin')
             process.exit(1)
+        }
+
+        if (html) {
+            try {
+                await fs.access(html, constants.R_OK)
+            } catch (_err) {
+                console.error(`Error: cannot read --html file: ${html}`)
+                process.exit(1)
+            }
         }
 
         await runTestsInBrowser(testCode, {
