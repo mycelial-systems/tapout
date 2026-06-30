@@ -150,7 +150,7 @@ const apiUrl = import.meta.env.DEV ?
 ```
 
 
-### CI
+## CI
 
 After `npm install`, you will need to do an `npx playwright install`.
 
@@ -171,7 +171,7 @@ For example, in Github CI,
 # ...
 ```
 
-### Generate HTML reports
+## Generate HTML reports
 
 By default writes to `stdout`.
 
@@ -180,7 +180,7 @@ cat ./test/index.js | npx tapout --reporter html > index.html
 open index.html  # View the generated report
 ```
 
-#### HTML Summary
+### HTML Summary
 
 * `--reporter html` with no other options -> output HTML to stdout
 * `--reporter html --outfile filename.html` -> save to `filename.html` in
@@ -195,6 +195,10 @@ open index.html  # View the generated report
 Pass in the name of a browser to use. Default is Chrome.
 
 Possibilities are `chromium`, `firefox`, `webkit`, or `edge`.
+
+```sh
+cat test.js | npx tapout --browser firefox
+```
 
 ### `-t`, `--timeout`
 
@@ -262,14 +266,15 @@ The HTML reporter generates an `index.html` file by default with:
 - If neither `--outdir` nor `--outfile` is specified, HTML output is sent
   to stdout
 
-### `--html`
+## Pass in HTML
 
-By default tapout serves a minimal empty page. Web components need real
-markup to upgrade, so pass `--html <path>` to serve your own HTML fixture as
-the page the browser visits. The completion harness and your piped test are
-injected automatically (just before `</body>`), and the fixture's directory
-is served as a static root so relative assets — CSS, sibling modules, images
-— resolve.
+Use option `--html` to pass in an HTML file instead of JS.
+By default tapout serves a minimal empty page.
+
+If you need to test, for example, a web component that depends on having
+specific markup in the page, this is how to do it. The fixture's directory
+(where the HTML file is located) is treated as a static root dir for relative
+links.
 
 A bare fragment (no `<!doctype>`/`<html>`) is wrapped in a minimal document
 for you.
@@ -298,9 +303,11 @@ the browser upgrades the existing element before your assertions run.
 Two caveats: tapout reserves the `/__tapout/` URL prefix for its harness and
 test bundle, so a fixture asset under that path would be shadowed; and harness
 injection finds the last `</body>` by string match, so a literal `</body>`
-inside a comment or string in the fixture could be matched.
+inside a comment or string in the fixture would break it.
 
-### GitHub Pages Integration
+---
+
+## GitHub Pages Integration
 
 The generated HTML file is self-contained and can be easily hosted on GitHub
 Pages or any static hosting service. Simply commit the HTML file to
