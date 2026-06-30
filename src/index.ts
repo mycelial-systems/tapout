@@ -161,17 +161,30 @@ export async function runTestsInBrowser (
         const pathname = url.pathname
 
         try {
-            if (pathname === '/' || pathname === '/test-runner.html') {
-                // Serve the static HTML file
+            if (pathname === '/__tapout/harness.js') {
+                // Serve the in-page harness module
+                const harnessPath = path.join(__dirname, 'test-harness.js')
+                const harnessContent = await fs.readFile(harnessPath, 'utf8')
+                res.writeHead(200, {
+                    'Content-Type': 'application/javascript'
+                })
+                res.end(harnessContent)
+            } else if (pathname === '/__tapout/test-bundle.js') {
+                // Serve the test code with Vite env transformation
+                const transformedCode = transformViteEnv(testCode)
+                res.writeHead(200, {
+                    'Content-Type': 'application/javascript'
+                })
+                res.end(transformedCode)
+            } else if (
+                pathname === '/' ||
+                pathname === '/test-runner.html'
+            ) {
+                // Serve the static HTML runner page
                 const htmlPath = path.join(__dirname, 'test-runner.html')
                 const htmlContent = await fs.readFile(htmlPath, 'utf8')
                 res.writeHead(200, { 'Content-Type': 'text/html' })
                 res.end(htmlContent)
-            } else if (pathname === '/test-bundle.js') {
-                // Serve the test code with Vite env transformation
-                const transformedCode = transformViteEnv(testCode)
-                res.writeHead(200, { 'Content-Type': 'application/javascript' })
-                res.end(transformedCode)
             } else {
                 // 404 for other paths
                 res.writeHead(404)
