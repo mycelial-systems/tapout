@@ -26,6 +26,7 @@ to [tape-run](https://github.com/tape-testing/tape-run).
   * [`-b`, `--browser`](#-b---browser)
   * [`-t`, `--timeout`](#-t---timeout)
   * [`-r`, `--reporter`](#-r---reporter)
+  * [`--html`](#--html)
   * [GitHub Pages Integration](#github-pages-integration)
 - [Accessibility Testing with Axe](#accessibility-testing-with-axe)
   * [Test specific WCAG rules](#test-specific-wcag-rules)
@@ -48,6 +49,7 @@ Options:
   -r, --reporter <name> Output format: tap, html (default: tap)
   --outdir <path>       Output directory for HTML reports (default: current directory)
   --outfile <name>      Output filename for HTML reports (default: index.html)
+  --html <path>         Serve a custom HTML fixture as the test page (for web components)
   -h, --help           Show this help message
 
 Examples:
@@ -58,6 +60,7 @@ Examples:
   cat test.js | tapout --reporter html
   cat test.js | tapout --reporter html --outdir ./reports
   cat test.js | tapout --reporter html --outfile my-test-results.html
+  cat test.js | tapout --html ./fixture.html
 ```
 
 ## *Featuring*
@@ -258,6 +261,44 @@ The HTML reporter generates an `index.html` file by default with:
   (default: index.html)
 - If neither `--outdir` nor `--outfile` is specified, HTML output is sent
   to stdout
+
+### `--html`
+
+By default tapout serves a minimal empty page. Web components need real
+markup to upgrade, so pass `--html <path>` to serve your own HTML fixture as
+the page the browser visits. The completion harness and your piped test are
+injected automatically (just before `</body>`), and the fixture's directory
+is served as a static root so relative assets — CSS, sibling modules, images
+— resolve.
+
+A bare fragment (no `<!doctype>`/`<html>`) is wrapped in a minimal document
+for you.
+
+`fixture.html`:
+
+```html
+<!doctype html>
+<html>
+  <body>
+    <my-greeting data-name="world"></my-greeting>
+    <script type="module" src="./my-greeting.js"></script>
+  </body>
+</html>
+```
+
+Run it (assertions still come from stdin):
+
+```bash
+cat test.js | tapout --html ./fixture.html
+```
+
+The markup is parsed first, then `my-greeting.js` registers the component and
+the browser upgrades the existing element before your assertions run.
+
+Two caveats: tapout reserves the `/__tapout/` URL prefix for its harness and
+test bundle, so a fixture asset under that path would be shadowed; and harness
+injection finds the last `</body>` by string match, so a literal `</body>`
+inside a comment or string in the fixture could be matched.
 
 ### GitHub Pages Integration
 

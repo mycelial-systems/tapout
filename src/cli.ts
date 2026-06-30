@@ -12,6 +12,7 @@ Options:
   -r, --reporter <name> Output format: tap, html (default: tap)
   --outdir <path>       Output directory for HTML reports (default: current directory)
   --outfile <name>      Output filename for HTML reports (default: index.html)
+  --html <path>         Serve a custom HTML fixture as the test page (for web components)
   -h, --help           Show this help message
 
 Examples:
@@ -21,7 +22,8 @@ Examples:
   cat test.js | tapout --browser edge
   cat test.js | tapout --reporter html
   cat test.js | tapout --reporter html --outdir ./reports
-  cat test.js | tapout --reporter html --outfile my-test-results.html`)
+  cat test.js | tapout --reporter html --outfile my-test-results.html
+  cat test.js | tapout --html ./fixture.html`)
 }
 
 function parseArgs () {

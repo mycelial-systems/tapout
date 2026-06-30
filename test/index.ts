@@ -691,3 +691,10 @@ test('CLI --html: no piped test code exits non-zero, no hang', async (t) => {
         'should exit non-zero (not hang) when nothing is piped'
     )
 })
+
+// AC5.3
+test('CLI --help lists the --html option', async (t) => {
+    const result = await runCliNoStdin(['--help'])
+    t.equal(result.exitCode, 0, '--help exits 0')
+    t.ok(result.stdout.includes('--html'), 'help text lists --html')
+})
