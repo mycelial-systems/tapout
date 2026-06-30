@@ -605,3 +605,29 @@ test('CLI --html: respects --timeout', async (t) => {
     )
     t.equal(result.exitCode, 0, 'should exit 0 with custom timeout')
 })
+
+// AC3.1
+test('CLI --html: sibling module served, upgrades markup', async (t) => {
+    const result = await runHtmlCliTest(
+        '_html-enhance-test.js',
+        '_html-fixture-external.html'
+    )
+    t.equal(result.exitCode, 0, 'should exit 0')
+    t.ok(
+        result.stdout.includes('ok 1 - sibling module upgraded markup'),
+        'sibling module served from fixture dir and upgraded markup'
+    )
+})
+
+// AC3.2
+test('CLI --html: path traversal request returns 404', async (t) => {
+    const result = await runHtmlCliTest(
+        '_html-traversal-test.js',
+        '_html-fixture.html'
+    )
+    t.equal(result.exitCode, 0, 'should exit 0')
+    t.ok(
+        result.stdout.includes('ok 1 - path traversal returns 404'),
+        'out-of-root path rejected with 404'
+    )
+})

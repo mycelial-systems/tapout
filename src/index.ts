@@ -160,6 +160,67 @@ function buildInjectedPage (rawHtml:string):string {
     return doc.slice(0, closeIndex) + harnessTag + doc.slice(closeIndex)
 }
 
+const MIME_TYPES:Record<string, string> = {
+    '.html': 'text/html',
+    '.js': 'application/javascript',
+    '.mjs': 'application/javascript',
+    '.css': 'text/css',
+    '.json': 'application/json',
+    '.svg': 'image/svg+xml',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.woff': 'font/woff',
+    '.woff2': 'font/woff2',
+    '.ttf': 'font/ttf',
+    '.map': 'application/json',
+    '.wasm': 'application/wasm',
+    '.ico': 'image/x-icon',
+    '.txt': 'text/plain'
+}
+
+type StaticResult =
+    { status:200; body:Buffer; contentType:string } |
+    { status:404 }
+
+/**
+ * Resolve urlPath under root and return the file, guarding against path
+ * traversal. Returns 404 (not 403) for anything that escapes root or is
+ * missing, so directory structure is not leaked.
+ */
+async function serveStaticFile (
+    root:string,
+    urlPath:string
+):Promise<StaticResult> {
+    let decoded:string
+    try {
+        // Strip any query string, then percent-decode.
+        decoded = decodeURIComponent(urlPath.split('?')[0])
+    } catch (_err) {
+        return { status: 404 }
+    }
+
+    // Resolve under root, then verify the result stays inside root.
+    const relative = decoded.replace(/^\/+/, '')
+    const resolved = path.resolve(root, relative)
+    const rel = path.relative(root, resolved)
+    if (rel.startsWith('..') || path.isAbsolute(rel)) {
+        return { status: 404 }
+    }
+
+    try {
+        const body = await fs.readFile(resolved)
+        const ext = path.extname(resolved).toLowerCase()
+        const contentType = MIME_TYPES[ext] || 'application/octet-stream'
+        return { status: 200, body, contentType }
+    } catch (_err) {
+        // Missing file, or path is a directory (EISDIR) -> 404.
+        return { status: 404 }
+    }
+}
+
 export async function runTestsInBrowser (
     testCode:string,
     options:{
@@ -180,10 +241,12 @@ export async function runTestsInBrowser (
 
     // In --html mode, read the fixture and build the injected page once.
     let injectedPage:string|null = null
+    let staticRoot = ''
     if (options.html) {
         const htmlPath = path.resolve(options.html)
         const rawHtml = await fs.readFile(htmlPath, 'utf8')
         injectedPage = buildInjectedPage(rawHtml)
+        staticRoot = path.dirname(htmlPath)
     }
 
     // Store test results for non-TAP reporters
@@ -222,9 +285,17 @@ export async function runTestsInBrowser (
                     res.writeHead(200, { 'Content-Type': 'text/html' })
                     res.end(injectedPage)
                 } else {
-                    // Phase 3 adds static file serving here.
-                    res.writeHead(404)
-                    res.end('Not Found')
+                    // Serve a static file from the fixture's directory.
+                    const result = await serveStaticFile(staticRoot, pathname)
+                    if (result.status === 200) {
+                        res.writeHead(200, {
+                            'Content-Type': result.contentType
+                        })
+                        res.end(result.body)
+                    } else {
+                        res.writeHead(404)
+                        res.end('Not Found')
+                    }
                 }
             } else if (
                 pathname === '/' ||
