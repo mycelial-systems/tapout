@@ -436,3 +436,13 @@ Run the tests for this module. See the [`test/` directory](./test/).
 ```bash
 npm test
 ```
+
+
+
+---
+
+
+
+```
+/ed3d-plan-and-execute:start-implementation-plan @docs/design-plans/2026-06-29-html-option.md .
+```
