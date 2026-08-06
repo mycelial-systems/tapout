@@ -35,7 +35,7 @@
     "build-main-page": "node scripts/build-main-page.js",
     "toc": "markdown-toc --maxdepth 3 -i README.md",
     "changelog": "auto-changelog -p --template keepachangelog --breaking-pattern 'BREAKING CHANGE:'",
-    "install-browsers": "playwright install msedge --with-deps",
+    "install-browsers": "playwright install --with-deps chromium firefox webkit msedge",
     "preversion": "npm run lint",
     "version": "npm run toc && npm run changelog && git add CHANGELOG.md README.md",
     "postversion": "git push --follow-tags && npm publish",
