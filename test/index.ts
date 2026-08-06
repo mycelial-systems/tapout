@@ -321,6 +321,22 @@ test('CLI: can run tests in Edge', async (t) => {
     )
 })
 
+// Chrome is launched via the `chrome` channel, so this uses whatever
+// Chrome is installed on the machine -- no `playwright install` needed.
+test('CLI: can run tests in Chrome', async (t) => {
+    const result = await runCliTest('_simple-test.js', 20000, 'chrome')
+
+    t.equal(result.exitCode, 0, 'simple test should exit with code 0 in Chrome')
+    t.ok(
+        result.stdout.includes('# Running tests in chrome'),
+        'should show browser comment for Chrome'
+    )
+    t.ok(
+        result.stdout.includes('TAP version 13'),
+        'should show TAP output'
+    )
+})
+
 test('CLI: respects custom timeout for long-running tests', async (t) => {
     // Test that takes 2 seconds but should complete within 10 second timeout
     const longRunningTest = `

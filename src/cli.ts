@@ -1,14 +1,29 @@
 #!/usr/bin/env node
 
-import { readStdin, runTestsInBrowser } from './index.js'
+import {
+    readStdin,
+    runTestsInBrowser,
+    type SupportedBrowser
+} from './index.js'
 import { promises as fs, constants } from 'node:fs'
+
+const BROWSERS:SupportedBrowser[] = [
+    'chromium',
+    'chrome',
+    'firefox',
+    'webkit',
+    'edge'
+]
 
 function showHelp () {
     console.log(`Usage: tapout [options]
 
 Options:
   -t, --timeout <ms>    Timeout in milliseconds (default: 5000)
-  -b, --browser <name>  Browser to use: chromium, firefox, webkit, edge (default: chromium)
+  -b, --browser <name>  Browser to use: chromium, chrome, firefox, webkit,
+                        edge (default: chromium). "chrome" and "edge" use
+                        the browser already installed on the machine, so
+                        they need no \`playwright install\`.
   -r, --reporter <name> Output format: tap, html (default: tap)
   --outdir <path>       Output directory for HTML reports (default: current directory)
   --outfile <name>      Output filename for HTML reports (default: index.html)
@@ -20,6 +35,7 @@ Examples:
   cat test.js | tapout --browser firefox
   cat test.js | tapout -b webkit -t 3000
   cat test.js | tapout --browser edge
+  cat test.js | tapout --browser chrome
   cat test.js | tapout --reporter html
   cat test.js | tapout --reporter html --outdir ./reports
   cat test.js | tapout --reporter html --outfile my-test-results.html
@@ -29,7 +45,7 @@ Examples:
 function parseArgs () {
     const args = process.argv.slice(2)
     let timeout = 5000  // default 5 seconds
-    let browser:'chromium'|'firefox'|'webkit'|'edge' = 'chromium'  // default chrome
+    let browser:SupportedBrowser = 'chromium'  // default chromium
     let reporter: 'tap' | 'html' = 'tap'  // default TAP output
     let outdir: string | undefined
     let outfile: string | undefined
@@ -49,13 +65,13 @@ function parseArgs () {
             const browserValue = args[i + 1]
             if (
                 !browserValue ||
-                !['chromium', 'firefox', 'webkit', 'edge'].includes(browserValue)
+                !BROWSERS.includes(browserValue as SupportedBrowser)
             ) {
                 console.error('Error: browser must be one of: ' +
-                    'chromium, firefox, webkit, edge')
+                    BROWSERS.join(', '))
                 process.exit(1)
             }
-            browser = browserValue as 'chromium'|'firefox'|'webkit'|'edge'
+            browser = browserValue as SupportedBrowser
             i++  // skip the next argument since we consumed it
         } else if (args[i] === '--reporter' || args[i] === '-r') {
             const reporterValue = args[i + 1]

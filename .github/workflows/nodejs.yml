@@ -24,7 +24,9 @@ jobs:
         run: |
           NPM_CONFIG_PRODUCTION=false npm install
           npm run build --if-present
-          npx playwright install --with-deps
+          # Only the bundled browsers. The chrome and edge tests launch
+          # by channel, using the browsers already on the runner image.
+          npx playwright install --with-deps chromium firefox webkit
         env:
           CI: true
       - name: Run tap tests

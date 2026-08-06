@@ -7,13 +7,24 @@ import { generateHTMLContent } from './util.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-export type SupportedBrowser = 'chromium'|'firefox'|'webkit'|'edge'
+export type SupportedBrowser = 'chromium'|'chrome'|'firefox'|'webkit'|'edge'
 
 const browsers:Record<SupportedBrowser, BrowserType> = {
     chromium,
+    chrome: chromium,  // Chrome uses Chromium engine
     firefox,
     webkit,
     edge: chromium  // Edge uses Chromium engine
+}
+
+// Browsers that are launched as an already-installed release channel
+// rather than Playwright's bundled build. Launching by channel means
+// there is nothing to download, so `playwright install` can be skipped
+// on machines that ship with Chrome or Edge -- including the Github
+// Actions Ubuntu runners.
+const CHANNELS:Partial<Record<SupportedBrowser, string>> = {
+    chrome: 'chrome',
+    edge: 'msedge'
 }
 
 type ConsoleMethod = 'log'|'info'|'warn'|'error'|'debug'
@@ -339,8 +350,9 @@ export async function runTestsInBrowser (
             })
         })
 
-        const browserOptions = browserType === 'edge' ?
-            { channel: 'msedge' as const } :
+        const channel = CHANNELS[browserType]
+        const browserOptions = channel ?
+            { channel } :
             (browserType === 'firefox' ?
                 {
                     headless: true,
@@ -352,12 +364,12 @@ export async function runTestsInBrowser (
                 } :
                 {})
 
-        const browser = await browsers[browserType === 'edge' ?
-            'chromium' :
-            browserType].launch(browserOptions)
+        const browser = await browsers[browserType].launch(browserOptions)
         const page = await browser.newPage()
-        const browserName = browserType === 'edge' ?
-            'edge' :
+        // Channel browsers all report as "chromium", so use the name
+        // that was asked for.
+        const browserName = channel ?
+            browserType :
             browser.browserType().name()
 
         // TAP comment -- which browser is being used

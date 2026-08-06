@@ -32,10 +32,11 @@ jobs:
         uses: actions/checkout@v4
       - name: Setup Pages
         uses: actions/configure-pages@v5
+      # No `playwright install` here. The docs build renders its example
+      # report with `tapout --browser chrome`, which uses the Chrome that
+      # is already on the runner image.
       - name: Install
-        run: |
-          npm install
-          npx playwright install --with-deps
+        run: npm install
       - name: Build Source
         run: npm run build
       - name: Build

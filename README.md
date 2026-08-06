@@ -22,6 +22,7 @@ to [tape-run](https://github.com/tape-testing/tape-run).
   * [`window.testsFinished`](#windowtestsfinished)
   * [Vite environment variables](#vite-environment-variables)
 - [CI](#ci)
+  * [Github Actions](#github-actions)
 - [Generate HTML reports](#generate-html-reports)
   * [HTML Summary](#html-summary)
   * [`-b`, `--browser`](#-b---browser)
@@ -90,6 +91,11 @@ also.
 npx playwright install --with-deps
 ```
 
+You can skip this step entirely if you use `--browser chrome` or
+`--browser edge`. Those launch the Chrome or Edge that is already on the
+machine, so there is no browser to download. See
+[Github Actions](#github-actions).
+
 
 ## Use
 
@@ -153,7 +159,9 @@ const apiUrl = import.meta.env.DEV ?
 
 ## CI
 
-After `npm install`, you will need to do an `npx playwright install`.
+After `npm install`, you will need to do an `npx playwright install`, unless
+you are testing in Chrome or Edge only. See
+[Github Actions](#github-actions) for how to skip the download.
 
 For example, in Github CI,
 
@@ -171,6 +179,53 @@ For example, in Github CI,
 
 # ...
 ```
+
+### Github Actions
+
+`npx playwright install` downloads a browser on every CI run, which is
+usually the slowest step in the job.
+
+The Github Actions Ubuntu runners ship with Google Chrome and Microsoft
+Edge already installed. Playwright can launch an installed browser instead
+of its own bundled build, with `channel`.
+
+The workflow becomes this (no install step):
+
+```yml
+name: tests
+on: [push]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+
+      # No `playwright install` -- Chrome is already on the runner.
+      - name: Install & build
+        run: |
+          npm install
+          npm run build
+
+      - name: Test
+        run: cat ./test/index.js | npx tapout --browser chrome
+```
+
+The engine is the same one your users have, and it is the same locally as
+in CI, as long as you have Chrome installed.
+
+If you do test in Firefox or WebKit, you still need those, but you can name
+just the ones you want rather than downloading all of them:
+
+```yml
+- run: npx playwright install --with-deps firefox webkit
+```
+
+This is the same trick as passing `launchOptions: { channel: 'chrome' }` to
+the Playwright provider in Vitest browser mode.
 
 ## Generate HTML reports
 
@@ -193,12 +248,28 @@ open index.html  # View the generated report
 
 ### `-b`, `--browser`
 
-Pass in the name of a browser to use. Default is Chrome.
+Pass in the name of a browser to use. Default is `chromium`.
 
-Possibilities are `chromium`, `firefox`, `webkit`, or `edge`.
+| name | what it launches | needs `playwright install`? |
+|------|------------------|-----------------------------|
+| `chromium` | Playwright's bundled Chromium | yes |
+| `chrome` | the Google Chrome on the machine | no |
+| `firefox` | Playwright's bundled Firefox | yes |
+| `webkit` | Playwright's bundled WebKit | yes |
+| `edge` | the Microsoft Edge on the machine | no |
 
 ```sh
 cat test.js | npx tapout --browser firefox
+```
+
+`chrome` and `edge` are launched by Playwright *channel*, meaning they use
+a browser that is already installed rather than one Playwright downloads.
+That makes them a good default in CI, where the download is pure overhead.
+They do require that browser to actually be present, so `chromium` remains
+the default.
+
+```sh
+cat test.js | npx tapout --browser chrome
 ```
 
 ### `-t`, `--timeout`
