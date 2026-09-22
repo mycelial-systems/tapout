@@ -730,6 +730,19 @@ test('CLI --html: no piped test code exits non-zero, no hang', async (t) => {
     )
 })
 
+test('CLI: plan mismatch exits non-zero', async (t) => {
+    const result = await runCliTest(
+        '_plan-mismatch-test.js',
+        10000
+    )
+
+    t.equal(
+        result.exitCode,
+        1,
+        'should exit 1 when fewer tests ran than planned'
+    )
+})
+
 // AC5.3
 test('CLI --help lists the --html option', async (t) => {
     const result = await runCliNoStdin(['--help'])

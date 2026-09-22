@@ -29,13 +29,28 @@ if (noAutoFinish) {
     autoFinishDelay = Math.max(500, Math.min(3000, Math.floor(timeoutMs * 0.2)))
 }
 
+// TAP plan tracking
+let planCount = null
+let actualCount = 0
+
 // Set up test completion detection
 let hasFinished = false
 let finishTimer = null
 
+function checkPlanMismatch () {
+    if (planCount !== null && actualCount !== planCount) {
+        originalConsole.log(
+            'not ok - planned ' + planCount +
+            ' tests but ran ' + actualCount
+        )
+        window.testsFailed = true
+    }
+}
+
 function markTestsFinished () {
     if (!hasFinished) {
         hasFinished = true
+        checkPlanMismatch()
         window.testsFinished = true
     }
 }
@@ -62,6 +77,16 @@ let lastLogTime = Date.now()
 console.log = function (...args) {
     originalConsole.log(...args)
     lastLogTime = Date.now()
+
+    const text = typeof args[0] === 'string' ? args[0] : ''
+    const planMatch = text.match(/^(\d+)\.\.(\d+)$/)
+    if (planMatch) {
+        planCount = parseInt(planMatch[2], 10)
+    }
+    if (/^(not )?ok \d+/.test(text)) {
+        actualCount++
+    }
+
     // Only reset timer if we haven't seen logs for a while and auto-finish
     // is enabled
     if (!hasFinished && !noAutoFinish) {
